@@ -9,6 +9,7 @@
 #include "gtest/gtest.h"
 #include <functional>
 #include <string>
+#include <cstring>
 #include <unordered_set>
 
 using rtl::none;
