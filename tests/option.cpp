@@ -7,9 +7,9 @@
 
 #include "rtl/Option.hpp"
 #include "gtest/gtest.h"
+#include <cstring>
 #include <functional>
 #include <string>
-#include <cstring>
 #include <unordered_set>
 
 using rtl::none;
@@ -131,6 +131,16 @@ TEST(option, unwrap_or)
     ASSERT_EQ(some(8).unwrap_or_else([]() { return 3; }), 8);
 }
 
+TEST(option, unwrap_or_operator)
+{
+    ASSERT_EQ(none<int>() || 3, 3);
+    ASSERT_EQ(some(8) || 3, 8);
+    ASSERT_EQ(
+        none<int>() || []() { return 3; }, 3);
+    ASSERT_EQ(
+        some(8) || []() { return 3; }, 8);
+}
+
 TEST(option, stream_operator)
 {
     std::stringstream ss;
@@ -183,9 +193,8 @@ TEST(option, map_as_ref)
 {
     const Option<Unique> mbOrig = some(Unique(3));
     Option<const Unique&> mbRef = mbOrig.as_ref();
-    Option<Unique> mbDoubled = mbRef.map([](const Unique& u) {
-        return Unique(u.get() * 2);
-    });
+    Option<Unique> mbDoubled
+        = mbRef.map([](const Unique& u) { return Unique(u.get() * 2); });
 
     ASSERT_TRUE(mbOrig);
     ASSERT_TRUE(!mbRef);
@@ -254,11 +263,8 @@ TEST(option, pipe_some)
     auto opt = some(5);
 
     ASSERT_EQ(
-        opt
-            | [](int n) { return n * n; }
-            | [](int n) { return n + 1; }
-            | [](int n) { return n / 2; }
-            | [](int n) { return n - 5; },
+        opt | [](int n) { return n * n; } | [](int n) { return n + 1; } |
+            [](int n) { return n / 2; } | [](int n) { return n - 5; },
         some((5 * 5 + 1) / 2 - 5));
 }
 
@@ -267,12 +273,11 @@ TEST(option, pipe_none)
     auto opt = none<int>();
 
     ASSERT_TRUE((
-        opt
-        | [](int n) { return n * n; }
-        | [](int n) { return n + 1; }
-        | [](int n) { return n / 2; }
-        | [](int n) { return n - 5; })
-                  .is_none());
+        opt | [](int n) { return n * n; } | [](int n) { return n + 1; } |
+        [](int n) { return n / 2; } |
+        [](int n) {
+            return n - 5;
+        }).is_none());
 }
 
 TEST(option, pipe_some_void)
@@ -281,12 +286,9 @@ TEST(option, pipe_some_void)
     int piped = 0;
 
     ASSERT_TRUE(
-        opt
-        | [](int n) { return n * n; }
-        | [](int n) { return n + 1; }
-        | [](int n) { return n / 2; }
-        | [](int n) { return n - 5; }
-        | [&](int n) { piped = n; });
+        opt | [](int n) { return n * n; } | [](int n) { return n + 1; } |
+        [](int n) { return n / 2; } | [](int n) { return n - 5; } |
+        [&](int n) { piped = n; });
 
     ASSERT_EQ(piped, (5 * 5 + 1) / 2 - 5);
 }
@@ -297,12 +299,9 @@ TEST(option, pipe_none_void)
     int piped = 0;
 
     ASSERT_FALSE(
-        opt
-        | [](int n) { return n * n; }
-        | [](int n) { return n + 1; }
-        | [](int n) { return n / 2; }
-        | [](int n) { return n - 5; }
-        | [&](int n) { piped = n; });
+        opt | [](int n) { return n * n; } | [](int n) { return n + 1; } |
+        [](int n) { return n / 2; } | [](int n) { return n - 5; } |
+        [&](int n) { piped = n; });
 
     ASSERT_EQ(piped, 0);
 }
@@ -385,14 +384,10 @@ TEST(option, example)
     opt = rtl::some("im here");
 
     // as_ref can be used to "borrow" the value (immutably) instead:
-    rtl::Option<size_t> mapped = opt
-                                     .as_ref()
-                                     .map([](const std::string& name) {
-                                         return name + ", too!";
-                                     })
-                                     .map([](const std::string& str) {
-                                         return str.size();
-                                     });
+    rtl::Option<size_t> mapped
+        = opt.as_ref()
+              .map([](const std::string& name) { return name + ", too!"; })
+              .map([](const std::string& str) { return str.size(); });
 
     ASSERT_EQ(mapped.expect("what?!"), std::strlen("im here, too!"));
 

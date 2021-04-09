@@ -17,8 +17,7 @@
 namespace rtl {
 namespace impl {
 
-    template <typename T>
-    class Base {
+    template <typename T> class Base {
     public:
         constexpr Base() noexcept = default;
 
@@ -64,10 +63,9 @@ namespace impl {
         }
 
         // set to some
-        template <
-            typename... Args,
-            typename = std::enable_if_t<
-                std::is_constructible<T, Args...>::value>>
+        template <typename... Args,
+            typename
+            = std::enable_if_t<std::is_constructible<T, Args...>::value>>
         void emplace(Args&&... args)
         {
             new (&m_value) T(std::forward<Args>(args)...);
@@ -79,8 +77,7 @@ namespace impl {
         alignas(T) unsigned char m_value[sizeof(T)];
     };
 
-    template <typename T>
-    class Base<T&> {
+    template <typename T> class Base<T&> {
     public:
         constexpr Base() noexcept = default;
 
@@ -122,8 +119,7 @@ namespace impl {
         std::add_pointer_t<T> m_value = nullptr;
     };
 
-    template <typename M, typename T>
-    class MethodProxy {
+    template <typename M, typename T> class MethodProxy {
     public:
         using class_type = std::remove_cv_t<std::remove_reference_t<T>>;
         using method_type = M class_type::*;
@@ -139,8 +135,7 @@ namespace impl {
         {
         }
 
-        template <typename... Args>
-        decltype(auto) operator()(Args&&... args)
+        template <typename... Args> decltype(auto) operator()(Args&&... args)
         {
             return (instance.*method)(std::forward<Args>(args)...);
         }
@@ -153,25 +148,19 @@ namespace impl {
     }
 }
 
-template <typename T>
-class Option;
+template <typename T> class Option;
 
-template <typename T>
-constexpr Option<T> some(T&&);
+template <typename T> constexpr Option<T> some(T&&);
 
-template <typename T>
-constexpr Option<T> none();
+template <typename T> constexpr Option<T> none();
 
-template <typename>
-struct is_option : std::false_type {
+template <typename> struct is_option : std::false_type {
 };
 
-template <typename T>
-struct is_option<Option<T>> : std::true_type {
+template <typename T> struct is_option<Option<T>> : std::true_type {
 };
 
-template <typename T>
-class Option : impl::Base<T> {
+template <typename T> class Option : impl::Base<T> {
 public:
     using value = T;
 
@@ -205,8 +194,7 @@ public:
         return *this;
     }
 
-    template <typename U>
-    bool operator==(const Option<U>& other) const
+    template <typename U> bool operator==(const Option<U>& other) const
     {
         if (is_none() || other.is_none()) {
             return is_none() && other.is_none();
@@ -255,9 +243,9 @@ public:
         -> std::enable_if_t<!std::is_member_pointer<T>::value, Q>
     {
         if (is_some()) {
-            return std::forward<T>(unwrap());
+            return Q(unwrap());
         } else {
-            return std::forward<T>(val);
+            return std::move(val);
         }
     }
 
@@ -272,7 +260,9 @@ public:
         }
     }
 
-    template <typename F>
+    template <typename F,
+        typename
+        = std::enable_if_t<std::is_same<T, std::result_of_t<F()>>::value>>
     T unwrap_or_else(F&& f)
     {
         if (is_some()) {
@@ -305,8 +295,7 @@ public:
         return oldVal;
     }
 
-    template <typename U, typename Q = T>
-    Option<T> replace(U Q::*mem)
+    template <typename U, typename Q = T> Option<T> replace(U Q::*mem)
     {
         Option<T> oldVal = take();
 
@@ -338,8 +327,8 @@ public:
     }
 
     template <typename F,
-        typename = std::enable_if_t<
-            !std::is_void<std::result_of_t<F(T)>>::value>>
+        typename
+        = std::enable_if_t<!std::is_void<std::result_of_t<F(T)>>::value>>
     decltype(auto) map(F&& f)
     {
         if (is_some()) {
@@ -350,8 +339,8 @@ public:
     }
 
     template <typename F,
-        typename = std::enable_if_t<
-            !std::is_void<std::result_of_t<F(T)>>::value>>
+        typename
+        = std::enable_if_t<!std::is_void<std::result_of_t<F(T)>>::value>>
     decltype(auto) and_then(F&& f)
     {
         return map(std::forward<F>(f)).flatten();
@@ -388,16 +377,16 @@ public:
     }
 
     template <typename F,
-        typename = std::enable_if_t<
-            !std::is_void<std::result_of_t<F(T)>>::value>>
+        typename
+        = std::enable_if_t<!std::is_void<std::result_of_t<F(T)>>::value>>
     decltype(auto) operator|(F&& f)
     {
         return map(f);
     }
 
     template <typename F,
-        typename = std::enable_if_t<
-            std::is_void<std::result_of_t<F(T)>>::value>>
+        typename
+        = std::enable_if_t<std::is_void<std::result_of_t<F(T)>>::value>>
     bool operator|(F&& f)
     {
         if (is_some()) {
@@ -408,19 +397,31 @@ public:
         }
     }
 
-    template <typename U, typename Q = T>
-    decltype(auto) operator|(U Q::*method)
+    template <typename U, typename Q = T> decltype(auto) operator|(U Q::*method)
     {
         return *this | std::mem_fn(method);
+    }
+
+    template <typename Q = T>
+    auto operator||(T val)
+        -> std::enable_if_t<!std::is_member_pointer<T>::value, Q>
+    {
+        return unwrap_or(std::move(val));
+    }
+
+    template <typename F,
+        typename
+        = std::enable_if_t<std::is_same<T, std::result_of_t<F()>>::value>>
+    decltype(auto) operator||(F&& fn)
+    {
+        return unwrap_or_else(fn);
     }
 
     template <typename M, typename Q = T>
     typename std::enable_if_t<!std::is_function<M>::value, Option<M>>
     operator[](M Q::*member)
     {
-        return map([&](T val) {
-            return val.*member;
-        });
+        return map([&](T val) { return val.*member; });
     }
 
     template <typename M, typename Q = T,
@@ -432,21 +433,18 @@ public:
         });
     }
 
-    template <typename... Args>
-    decltype(auto) operator()(Args&&... args)
+    template <typename... Args> decltype(auto) operator()(Args&&... args)
     {
         return call(std::forward<Args>(args)...);
     }
 };
 
-template <typename T>
-constexpr Option<T> none()
+template <typename T> constexpr Option<T> none()
 {
     return {};
 }
 
-template <typename T>
-constexpr Option<T> some(T&& v)
+template <typename T> constexpr Option<T> some(T&& v)
 {
     Option<T> opt;
 
@@ -468,8 +466,7 @@ template <typename T>
 
 namespace std {
 
-template <typename T>
-struct hash<rtl::Option<T>> {
+template <typename T> struct hash<rtl::Option<T>> {
     using argument_type = rtl::Option<T>;
     using result_type = std::size_t;
 
