@@ -352,6 +352,18 @@ TEST(option, member_access)
         }
     };
 
+    auto val = some<A>({ 3 });
+
+    ASSERT_EQ(val[&A::field].copied(), some(3));
+    ASSERT_EQ(val[&A::method](), some(3));
+
+    {
+        const auto& valref = val;
+
+        ASSERT_EQ(valref[&A::field].copied(), some(3));
+        ASSERT_EQ(valref[&A::method](), some(3));
+    }
+
     ASSERT_EQ(some<A>({ 5 })[&A::field], some(5));
     ASSERT_EQ(some<A>({ 5 })[&A::method](), some(5));
     ASSERT_EQ(some<A>({ 5 }) | &A::method, some(5));
@@ -360,6 +372,22 @@ TEST(option, member_access)
     ASSERT_TRUE(nothing[&A::field].is_none());
     ASSERT_TRUE(nothing[&A::method]().is_none());
     ASSERT_TRUE((nothing | &A::method).is_none());
+
+    {
+        auto valasref = val.as_ref();
+
+        // FIXME:
+        // ASSERT_EQ(valasref[&A::field].copied(), some(3));
+        // ASSERT_EQ(valasref[&A::method](), some(3));
+    }
+
+    {
+        auto valasmut = val.as_mut();
+
+        // FIXME:
+        // ASSERT_EQ(valasmut[&A::field].copied(), some(3));
+        // ASSERT_EQ(valasmut[&A::method](), some(3));
+    }
 }
 
 TEST(option, example)

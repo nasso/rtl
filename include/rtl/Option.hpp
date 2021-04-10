@@ -124,16 +124,8 @@ namespace impl {
         using class_type = std::remove_cv_t<std::remove_reference_t<T>>;
         using method_type = M class_type::*;
 
-    private:
         T instance;
         method_type method;
-
-    public:
-        MethodProxy(T obj, method_type method)
-            : instance(std::move(obj))
-            , method(method)
-        {
-        }
 
         template <typename... Args> decltype(auto) operator()(Args&&... args)
         {
@@ -163,6 +155,9 @@ template <typename T> struct is_option<Option<T>> : std::true_type {
 template <typename T> class Option : impl::Base<T> {
 public:
     using value = T;
+    using reference = std::add_lvalue_reference_t<T>;
+    using rvalue = std::add_rvalue_reference_t<T>;
+    using base_type = std::remove_reference_t<std::remove_cv_t<T>>;
 
     constexpr Option() noexcept
         : impl::Base<T>()
@@ -192,6 +187,13 @@ public:
         }
 
         return *this;
+    }
+
+    template <typename = std::enable_if_t<std::is_reference<T>::value
+                  && std::is_copy_constructible<base_type>::value>>
+    Option<base_type> copied() const
+    {
+        return as_ref() | [](const auto& ref) { return base_type(ref); };
     }
 
     template <typename U> bool operator==(const Option<U>& other) const
@@ -355,7 +357,7 @@ public:
     template <typename... Args>
     std::enable_if_t<!std::is_void<std::result_of_t<T(Args...)>>::value,
         Option<std::result_of_t<T(Args...)>>>
-    call(Args&&... args)
+    call(Args&&... args) &&
     {
         if (is_some()) {
             return some(unwrap()(std::forward<Args>(args)...));
@@ -366,10 +368,34 @@ public:
 
     template <typename... Args>
     std::enable_if_t<std::is_void<std::result_of_t<T(Args...)>>::value, bool>
-    call(Args&&... args)
+    call(Args&&... args) &&
     {
         if (is_some()) {
             unwrap()(std::forward<Args>(args)...);
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    template <typename... Args>
+    std::enable_if_t<!std::is_void<std::result_of_t<T(Args...)>>::value,
+        Option<std::result_of_t<T(Args...)>>>
+    call(Args&&... args) &
+    {
+        if (is_some()) {
+            return some(as_mut().unwrap()(std::forward<Args>(args)...));
+        } else {
+            return {};
+        }
+    }
+
+    template <typename... Args>
+    std::enable_if_t<std::is_void<std::result_of_t<T(Args...)>>::value, bool>
+    call(Args&&... args) &
+    {
+        if (is_some()) {
+            as_mut().unwrap()(std::forward<Args>(args)...);
             return true;
         } else {
             return false;
@@ -390,7 +416,7 @@ public:
     bool operator|(F&& f)
     {
         if (is_some()) {
-            f(unwrap());
+            f(std::move(unwrap()));
             return true;
         } else {
             return false;
@@ -419,17 +445,56 @@ public:
 
     template <typename M, typename Q = T>
     typename std::enable_if_t<!std::is_function<M>::value, Option<M>>
-    operator[](M Q::*member)
+    operator[](M Q::*member) &&
     {
-        return map([&](T val) { return val.*member; });
+        return map([&](auto val) { return val.*member; });
+    }
+
+    template <typename M, typename Q = T>
+    typename std::enable_if_t<!std::is_function<M>::value,
+        Option<std::add_lvalue_reference_t<std::add_const_t<M>>>>
+    operator[](M Q::*member) const&
+    {
+        return as_ref().map([&](const auto& val) -> const auto& {
+            return val.*member;
+        });
+    }
+
+    template <typename M, typename Q = T>
+    typename std::enable_if_t<!std::is_function<M>::value,
+        Option<std::add_lvalue_reference_t<M>>>
+    operator[](M Q::*member) &
+    {
+        return as_mut().map(
+            [&](reference val) -> std::add_lvalue_reference_t<M> {
+                return val.*member;
+            });
     }
 
     template <typename M, typename Q = T,
         typename = std::enable_if_t<std::is_function<M>::value>>
-    decltype(auto) operator[](M Q::*member)
+    decltype(auto) operator[](M Q::*member) &&
     {
         return map([&](T val) {
-            return impl::MethodProxy<M, T>(std::forward<T>(val), member);
+            return impl::MethodProxy<M, T> { val, member };
+        });
+    }
+
+    template <typename M, typename Q = T,
+        typename = std::enable_if_t<std::is_function<M>::value>>
+    decltype(auto) operator[](M Q::*member) const&
+    {
+        return as_ref().map([&](const base_type& val) {
+            return impl::MethodProxy<M, const base_type&> { val, member };
+        });
+    }
+
+    template <typename M, typename Q = T,
+        typename = std::enable_if_t<std::is_function<M>::value>>
+    decltype(auto) operator[](M Q::*member) &
+    {
+        return as_mut().map([&](reference val) {
+            return impl::MethodProxy<M, reference> { val, member };
         });
     }
 
