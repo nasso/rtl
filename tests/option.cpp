@@ -116,6 +116,11 @@ TEST(option, map_simple)
     ASSERT_EQ(dbl.unwrap(), 6);
 }
 
+TEST(option, expect_none)
+{
+    ASSERT_ANY_THROW(some(3).expect_none("bad!"));
+}
+
 TEST(option, unwrap_none)
 {
     ASSERT_ANY_THROW(none<int>().unwrap());

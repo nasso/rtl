@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -235,9 +236,24 @@ public:
         return std::forward<T>(val);
     }
 
+    void expect_none(const std::string& msg)
+    {
+        if (!is_none()) {
+            std::stringstream ss(msg);
+            ss << ": " << unwrap();
+
+            throw std::runtime_error(ss.str());
+        }
+    }
+
     T unwrap()
     {
         return std::forward<T>(expect("unwrap() called on a `none` value"));
+    }
+
+    void unwrap_none()
+    {
+        expect_none("unwrap_none() called on a `some` value");
     }
 
     template <typename Q = T>
